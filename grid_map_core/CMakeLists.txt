@@ -1,18 +1,14 @@
-cmake_minimum_required(VERSION 3.5.1)
-project(grid_map_core)
+cmake_minimum_required(VERSION 3.12.0)
+project(GridMapCore)
 
 set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 add_compile_options(-Wall -Wextra -Wpedantic)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-## Find catkin macros and libraries
-find_package(catkin REQUIRED)
-
-## Define Eigen addons. 
-include(cmake/${PROJECT_NAME}-extras.cmake)
+## Define Eigen addons. Creates an interface library: CompileFlags
+include(cmake/grid_map_core-extras.cmake)
 
 ## System dependencies are found with CMake's conventions
-#find_package(Eigen3 REQUIRED)
 # Solution to find Eigen3 with Saucy.
 find_package(Eigen3 QUIET)
 if(NOT EIGEN3_FOUND)
@@ -21,42 +17,14 @@ if(NOT EIGEN3_FOUND)
   set(EIGEN3_INCLUDE_DIR ${EIGEN3_INCLUDE_DIRS})
 endif()
 
-###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if you package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
-  INCLUDE_DIRS
-    include
-    ${EIGEN3_INCLUDE_DIR}
-  LIBRARIES
-    ${PROJECT_NAME}
-  CATKIN_DEPENDS
-  DEPENDS
-    #Eigen3
-  CFG_EXTRAS
-    ${PROJECT_NAME}-extras.cmake
-)
+find_package(Eigen3 REQUIRED)
 
 ###########
 ## Build ##
 ###########
 
-## Specify additional locations of header files
-include_directories(
-  include
-  SYSTEM
-    ${catkin_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}
-)
-
 ## Declare a cpp library
-add_library(${PROJECT_NAME}
+add_library(GridMapCore
    src/GridMap.cpp
    src/GridMapMath.cpp
    src/SubmapGeometry.cpp
@@ -72,71 +40,73 @@ add_library(${PROJECT_NAME}
    src/iterators/LineIterator.cpp
    src/iterators/SlidingWindowIterator.cpp
 )
-
-target_link_libraries(${PROJECT_NAME}
-  ${catkin_LIBRARIES}
+target_link_libraries(GridMapCore
+  Eigen3::Eigen CompileFlags
+)
+target_include_directories(GridMapCore PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+    $<INSTALL_INTERFACE:include>
 )
 
-#############
-## Install ##
-#############
-
-# Mark executables and/or libraries for installation
-install(
-  TARGETS ${PROJECT_NAME}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-# Mark cpp header files for installation
-install(
-  DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.hpp"
-)
-
-# Mark other files for installation
-install(
-  DIRECTORY doc
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
+##############
+## Examples ##
+##############
+option(BUILD_EXAMLPES "Build examples" OFF)
+if(BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()
 
 #############
 ## Testing ##
 #############
 
-if(CATKIN_ENABLE_TESTING)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+option(BUILD_TESTS "Build tests" OFF)
+if(BUILD_TESTS)
+  enable_testing()
+  include(CTest)
+  find_package(GTest REQUIRED)
 
-  ## Add gtest based cpp test target and link libraries
-  catkin_add_gtest(${PROJECT_NAME}-test
-    test/test_grid_map_core.cpp
-    test/test_helpers.cpp
-    test/CubicConvolutionInterpolationTest.cpp
-    test/CubicInterpolationTest.cpp
-    test/GridMapMathTest.cpp
-    test/GridMapTest.cpp
-    test/GridMapIteratorTest.cpp
-    test/LineIteratorTest.cpp
-    test/EllipseIteratorTest.cpp
-    test/SubmapIteratorTest.cpp
-    test/PolygonIteratorTest.cpp
-    test/PolygonTest.cpp
-    test/EigenPluginsTest.cpp
-    test/SpiralIteratorTest.cpp
-    test/SlidingWindowIteratorTest.cpp
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+  add_library(test_helpers test/test_helpers.cpp)
+    target_link_libraries(test_helpers
+      GridMapCore
+      ${GTEST_LIBRARIES}
+      pthread
+    )
+
+  function(add_gtest_target target)
+    add_executable(${target} test/${target}.cpp)
+    target_link_libraries(${target}
+      GridMapCore
+      ${GTEST_LIBRARIES}
+      pthread
+      test_helpers
+    )
+    add_test(${target} "../tests/test_grid_map_core")
+    target_include_directories(${target} PRIVATE include tests)
+  endfunction()
+
+  set(TEST_TARGETS
+    test_grid_map_core
+    CubicConvolutionInterpolationTest
+    CubicInterpolationTest
+    GridMapMathTest
+    GridMapTest
+    GridMapIteratorTest
+    LineIteratorTest
+    EllipseIteratorTest
+    SubmapIteratorTest
+    PolygonIteratorTest
+    PolygonTest
+    EigenPluginsTest
+    SpiralIteratorTest
+    SlidingWindowIteratorTest
   )
-  target_include_directories(${PROJECT_NAME}-test PRIVATE
-    include
-  )
-  target_include_directories(${PROJECT_NAME}-test SYSTEM PUBLIC
-    ${catkin_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}
-  )
-  target_link_libraries(${PROJECT_NAME}-test
-    ${PROJECT_NAME}
-  )
+
+  foreach(target ${TEST_TARGETS})
+    add_gtest_target(${target})
+  endforeach()
+
 
   ###################
   ## Code_coverage ##
@@ -145,7 +115,7 @@ if(CATKIN_ENABLE_TESTING)
   if(cmake_code_coverage_FOUND)
     add_gtest_coverage(
       TEST_BUILD_TARGETS
-        ${PROJECT_NAME}-test
+        GridMapCore-test
     )
   endif()
 endif()
@@ -159,3 +129,43 @@ if(cmake_clang_tools_FOUND)
     DISABLE_CLANG_FORMAT
   )
 endif(cmake_clang_tools_FOUND)
+
+########################
+## Installing targets ##
+########################
+# Export package for use from the build tree
+set(CMAKE_EXPORT_DIR lib/cmake/GridMapCore)
+set(TARGETS_NAME "GridMapCore")
+set(TARGETS_NAMESPACE "GridMap")
+set(TARGETS_CONFIG_FILENAME "${TARGETS_NAME}Config.cmake.in")
+
+install(
+  TARGETS "${TARGETS_NAME}" CompileFlags
+  EXPORT  "${TARGETS_NAME}Targets"
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib 
+)
+install(EXPORT "${TARGETS_NAME}Targets" 
+  NAMESPACE "${TARGETS_NAMESPACE}::"
+  DESTINATION ${CMAKE_EXPORT_DIR}
+)
+
+# Install the include directory
+install(
+  DIRECTORY ${PROJECT_SOURCE_DIR}/include/
+  DESTINATION include
+)
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  "${TARGETS_CONFIG_FILENAME}" "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Config.cmake"
+  INSTALL_DESTINATION "${CMAKE_EXPORT_DIR}"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Config.cmake" DESTINATION "${CMAKE_EXPORT_DIR}")
+
+# Export without installing
+export(
+  EXPORT "${TARGETS_NAME}Targets"
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Targets.cmake"
+  NAMESPACE "${TARGETS_NAMESPACE}::"
+)
+
