@@ -5,65 +5,37 @@ set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 add_compile_options(-Wall -Wextra -Wpedantic)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-## Find catkin macros and libraries
-find_package(catkin REQUIRED COMPONENTS
-  grid_map_core
-  cv_bridge
-  filters
-)
+find_package(GridMapCore REQUIRED)
+find_package(Eigen3 QUIET)
 
-find_package(OpenCV REQUIRED
-  COMPONENTS
-  opencv_photo
-)
+if(NOT EIGEN3_FOUND)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(EIGEN3 REQUIRED eigen3)
+  set(EIGEN3_INCLUDE_DIR ${EIGEN3_INCLUDE_DIRS})
+endif()
 
-###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if you package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
-  INCLUDE_DIRS
-    include
-  LIBRARIES
-    ${PROJECT_NAME}
-  CATKIN_DEPENDS
-    grid_map_core
-    cv_bridge
-    filters
-  DEPENDS
-    OpenCV
-)
+find_package(Eigen3 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 ###########
 ## Build ##
 ###########
 
-## Specify additional locations of header files
-include_directories(
-  include
-  SYSTEM
-    ${catkin_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}
-)
-
 ## Declare a cpp library
-add_library(${PROJECT_NAME}
+add_library(GridMapCv
   src/GridMapCvProcessing.cpp
-  src/InpaintFilter.cpp
+  #src/InpaintFilter.cpp
 )
-
-target_link_libraries(${PROJECT_NAME}
-  ${catkin_LIBRARIES}
+target_link_libraries(GridMapCv
+  GridMap::GridMapCore
+  Eigen3::Eigen
   ${OpenCV_LIBRARIES}
 )
-
-add_dependencies(${PROJECT_NAME}
-  ${catkin_EXPORTED_TARGETS}
+target_include_directories(
+  GridMapCv
+  PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+  $<INSTALL_INTERFACE:include>
 )
 
 #############
@@ -72,23 +44,10 @@ add_dependencies(${PROJECT_NAME}
 
 # Mark executables and/or libraries for installation
 install(
-  TARGETS ${PROJECT_NAME}
+  TARGETS GridMapCv
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-# Mark cpp header files for installation
-install(
-  DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.hpp"
-)
-
-# Mark other files for installation.
-install(
-  FILES filter_plugins.xml
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
 #############
@@ -99,20 +58,20 @@ if(CATKIN_ENABLE_TESTING)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
   ## Add gtest based cpp test target and link libraries
-  catkin_add_gtest(${PROJECT_NAME}-test
+  catkin_add_gtest(GridMapCv-test
     test/test_grid_map_cv.cpp
     test/GridMapCvTest.cpp
     test/GridMapCvProcessingTest.cpp
   )
-  target_include_directories(${PROJECT_NAME}-test PRIVATE
+  target_include_directories(GridMapCv-test PRIVATE
     include
   )
-  target_include_directories(${PROJECT_NAME}-test SYSTEM PUBLIC
+  target_include_directories(GridMapCv-test SYSTEM PUBLIC
     ${catkin_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
   )
-  target_link_libraries(${PROJECT_NAME}-test
-    ${PROJECT_NAME}
+  target_link_libraries(GridMapCv-test
+    GridMapCv
   )
 
   ###################
@@ -122,7 +81,7 @@ if(CATKIN_ENABLE_TESTING)
   if(cmake_code_coverage_FOUND)
     add_gtest_coverage(
       TEST_BUILD_TARGETS
-        ${PROJECT_NAME}-test
+        GridMapCv-test
     )
   endif()
 endif()
@@ -136,3 +95,43 @@ if(cmake_clang_tools_FOUND)
     DISABLE_CLANG_FORMAT
   )
 endif(cmake_clang_tools_FOUND)
+
+########################
+## Installing targets ##
+########################
+# Export package for use from the build tree
+set(CMAKE_EXPORT_DIR lib/cmake/GridMapCv)
+set(TARGETS_NAME "GridMapCv")
+set(TARGETS_NAMESPACE "GridMap")
+set(TARGETS_CONFIG_FILENAME "${TARGETS_NAME}Config.cmake.in")
+
+install(
+  TARGETS "${TARGETS_NAME}"
+  EXPORT  "${TARGETS_NAME}Targets"
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib 
+)
+install(EXPORT "${TARGETS_NAME}Targets" 
+  NAMESPACE "${TARGETS_NAMESPACE}::"
+  DESTINATION ${CMAKE_EXPORT_DIR}
+)
+
+# Install the include directory
+install(
+  DIRECTORY ${PROJECT_SOURCE_DIR}/include/
+  DESTINATION include
+)
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  "${TARGETS_CONFIG_FILENAME}" "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Config.cmake"
+  INSTALL_DESTINATION "${CMAKE_EXPORT_DIR}"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Config.cmake" DESTINATION "${CMAKE_EXPORT_DIR}")
+
+# Export without installing
+export(
+  EXPORT "${TARGETS_NAME}Targets"
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/${TARGETS_NAME}Targets.cmake"
+  NAMESPACE "${TARGETS_NAMESPACE}::"
+)
+

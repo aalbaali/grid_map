@@ -9,9 +9,7 @@
 #pragma once
 
 #include <grid_map_core/grid_map_core.hpp>
-
-// OpenCV
-#include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp>
 
 namespace grid_map {
 
